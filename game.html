@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
+    <title>Pokemon-Card Online - 対戦中</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { 
+            background-color: #1a1a1a; 
+            color: white; 
+            font-family: sans-serif; 
+            margin: 0; 
+            overflow: hidden; 
+            touch-action: none; 
+            user-select: none; 
+            -webkit-user-select: none;
+        }
+        #board { width: 100vw; height: 100vh; position: relative; background-color: #2c3e50; z-index: 1; }
+        
+        #selection-rect { position: absolute; border: 1px solid #3498db; background: rgba(52, 152, 219, 0.2); pointer-events: none; display: none; z-index: 10000; }
+
+        /* フィールド枠共通デザイン */
+        .field-tray { 
+            position: absolute; 
+            border: 2px solid rgba(230, 126, 34, 0.3); 
+            background: rgba(230, 126, 34, 0.05); 
+            border-radius: 8px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            pointer-events: none; 
+            z-index: 5;
+            box-sizing: border-box;
+        }
+        .field-tray-label { 
+            font-size: 9px; 
+            font-weight: bold; 
+            color: #e67e22; 
+            opacity: 0.4; 
+            text-transform: uppercase;
+        }
+
+        /* スタジアム */
+        #stadium-tray { 
+            top: 50%; 
+            left: calc(50% + 300px); 
+            width: 95px; 
+            height: 133px; 
+            transform: translate(-50%, -50%); 
+            border: 2px solid rgba(120, 145, 80, 0.5); 
+            background: rgba(120, 145, 80, 0.08);
+        }
+        #stadium-tray .field-tray-label { color: #8fa372; opacity: 0.5; }
+
+        /* 自分のフィールド */
+        #active-tray { bottom: 35%; left: 50%; width: 95px; height: 133px; transform: translateX(-50%); } 
+        #bench-tray { bottom: 21%; left: 50%; width: 600px; height: 125px; transform: translateX(-50%); }
+
+        /* 相手のフィールド */
+        #opp-active-tray { top: 35%; left: 50%; width: 95px; height: 133px; transform: translateX(-50%); border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.02); }
+        #opp-bench-tray { top: 21%; left: 50%; width: 600px; height: 125px; transform: translateX(-50%); border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.02); }
+
+        /* トレイ */
+        .tray { position: absolute; border: 3px solid rgba(230, 126, 34, 0.6); z-index: 10; background: rgba(255, 255, 255, 0.05); box-sizing: border-box; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .tray-label { position: absolute; width: 100%; text-align: center; font-size: 10px; font-weight: bold; letter-spacing: 1px; opacity: 0.6; color: #e67e22; pointer-events: none; }
+        .tray-placeholder { width: 80px; height: 112px; border-radius: 6px; pointer-events: none; object-fit: cover; display: none; }
+
+        #deck-tray { right: 2%; bottom: 30%; width: 100px; height: 140px; cursor: pointer; }
+        #trash-tray { right: 2%; bottom: 5%; width: 100px; height: 140px; }
+        #my-tray { bottom: 0; left: 10vw; width: 65.5vw; height: 20vh; border-bottom: none; border-radius: 15px 15px 0 0; background: rgba(230, 126, 34, 0.08); border-color: #e67e22; }
+        #hand-controller { position: absolute; left: 76.0vw; bottom: 0; width: 14vw; height: 20vh; background: rgba(46, 204, 113, 0.1); border: 2px dashed #2ecc71; border-bottom: none; border-radius: 15px 15px 0 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: #2ecc71; text-align: center; pointer-events: all; }
+
+        #opp-deck-tray { left: 2%; top: 30%; width: 100px; height: 140px; border-color: rgba(255,255,255,0.2); }
+        #opp-trash-tray { left: 2%; top: 5%; width: 100px; height: 140px; border-color: rgba(255,255,255,0.2); }
+        #opp-tray { top: 0; left: 10vw; width: 80vw; height: 20vh; border-top: none; border-radius: 0 0 15px 15px; border-color: rgba(255, 255, 255, 0.15); }
+
+        /* 山札の枚数表示デザイン（共通設定） */
+        #my-deck-count, #opp-deck-count {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%); /* 左右中央合わせ */
+            
+            /* 背景のデザイン（透過黒：ダメカンBOX風） */
+            background: rgba(0, 0, 0, 0.6);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+
+            /* フォント設定 */
+            font-family: 'Arial', sans-serif;
+            font-size: 14px;
+            color: #ffffff;
+            font-weight: bold;
+            text-align: center;
+            white-space: nowrap;
+
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        /* 自分側の位置（上） */
+        #my-deck-count {
+            top: 15px;
+        }
+
+        /* 相手側の位置（下） */
+        #opp-deck-count {
+            bottom: 15px; /* topの代わりにbottomを使って下端に配置 */
+        }
+
+        .view-btn { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); background: #e67e22; color: white; border: none; font-size: 9px; padding: 2px 6px; border-radius: 4px; cursor: pointer; z-index: 25; }
+        .shuffle-btn { position: absolute; top: 0px; left: 50%; transform: translateX(-50%); background: #e67e22; color: white; border: none; font-size: 9px; padding: 2px 8px; border-radius: 4px; cursor: pointer; z-index: 25; }
+
+        .ctrl-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 5px; width: 90%; }
+        .ctrl-btn { background: #27ae60; color: white; border: none; border-radius: 4px; padding: 4px 0; font-size: 9px; cursor: pointer; font-weight: bold; }
+
+        .card { width: 85px; height: 119px; position: absolute; cursor: grab; user-select: none; border-radius: 6px; box-shadow: 2px 2px 8px rgba(0,0,0,0.5); z-index: 100; border: 1px solid rgba(255,255,255,0.1); touch-action: none; }
+        .card.back { content: url('https://www.pokemon-card.com/assets/images/noimage/poke_ura.jpg') !important; }
+        .card.selected { border: 2px solid #f39c12; box-shadow: 0 0 12px #f39c12; }
+
+        #zoom-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 50000; justify-content: center; align-items: center; cursor: zoom-out; }
+        #zoom-img { height: 85vh; border-radius: 15px; }
+        #coin { 
+            width: 150px; 
+            height: 150px; 
+            border-radius: 50%; 
+            position: absolute; 
+            top: 50%; 
+            left: 34%; 
+            transform: translate(-50%, -50%); 
+            cursor: pointer; 
+            z-index: 500; 
+            /* はじめは表を表示 */
+            background-image: url('./image/PokeCoin.png'); 
+            background-size: cover;
+            background-position: center;
+            transition: transform 0.6s ease-out;
+        }
+
+        /* 回転と同時に画像をパタパタと切り替えるアニメーション */
+        @keyframes coin-flip {
+            0%   { transform: translate(-50%, -50%) rotateY(0deg);    background-image: url('./image/PokeCoin.png'); }
+            10%  { background-image: url('./image/PokeCoin-ura.png'); }
+            20%  { background-image: url('./image/PokeCoin.png'); }
+            30%  { background-image: url('./image/PokeCoin-ura.png'); }
+            40%  { background-image: url('./image/PokeCoin.png'); }
+            50%  { background-image: url('./image/PokeCoin-ura.png'); }
+            60%  { background-image: url('./image/PokeCoin.png'); }
+            70%  { background-image: url('./image/PokeCoin-ura.png'); }
+            80%  { background-image: url('./image/PokeCoin.png'); }
+            90%  { background-image: url('./image/PokeCoin-ura.png'); }
+            100% { transform: translate(-50%, -50%) rotateY(1800deg); background-image: url('./image/PokeCoin.png'); }
+        }
+
+        .flipping {
+            animation: coin-flip 0.6s ease-out;
+        }
+
+        /* 結果に応じた画像 */
+        .heads { background-image: url('./image/PokeCoin.png') !important; }
+        .tails { background-image: url('./image/PokeCoin-ura.png') !important; }
+        
+        #list-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 30000; overflow-y: auto; padding: 20px; text-align: center; }
+        #list-header { color: orange; font-weight: bold; margin-bottom: 15px; font-size: 18px; }
+        #list-content { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; padding-bottom: 40px; }
+        .list-card { width: 100px; border-radius: 8px; cursor: pointer; transition: transform 0.2s, opacity 0.2s; }
+        .list-card.back { content: url('https://www.pokemon-card.com/assets/images/noimage/poke_ura.jpg') !important; }
+
+        #status-display { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 20px; font-size: 9px; color: #aaa; z-index: 1000; }
+
+        /* ダメカン・マーカー */
+        .counter { 
+            width: 30px; height: 30px; position: absolute; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 12px; font-weight: bold; color: white; cursor: grab; 
+            z-index: 2000; box-shadow: 1px 1px 4px rgba(0,0,0,0.5); touch-action: none;
+        }
+        .counter-10 { background: radial-gradient(circle, #f1c40f, #d35400); border: 2px solid #fff; }
+        .counter-50 { background: radial-gradient(circle, #e67e22, #a04000); border: 2px solid #fff; }
+        .counter-100 { background: radial-gradient(circle, #e74c3c, #922b21); border: 2px solid #fff; }
+        
+        .marker { 
+            width: 36px; height: 36px; position: absolute; border-radius: 6px; 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 9px; font-weight: bold; color: white; cursor: grab; 
+            z-index: 2000; box-shadow: 1px 1px 4px rgba(0,0,0,0.5); touch-action: none;
+            border: 2px solid #fff;
+        }
+        .marker-poison { background: #8e44ad; }
+        .marker-burn { background: #d35400; border-color: #f1c40f; }
+        .marker-paralysis { background: #f1c40f; color: #000; }
+        .marker-sleep { background: #2c3e50; }
+        .marker-confusion { background: #27ae60; }
+
+        #counter-panel {
+            position: absolute;
+            top: 50%;
+            left: calc(50% + 360px);
+            transform: translateY(-50%);
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            z-index: 10;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .remote-cursor {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 2px solid #e74c3c;
+            border-radius: 50%;
+            pointer-events: none; /* カーソル自体が邪魔にならないようにする */
+            z-index: 99999;
+            transition: transform 0.1s linear;
+        }
+        .remote-cursor::after {
+            content: "対戦相手";
+            position: absolute;
+            top: -20px;
+            left: 10px;
+            background: #e74c3c;
+            color: white;
+            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        .panel-btn {
+            width: 45px; height: 45px; border-radius: 8px; border: none;
+            color: white; font-weight: bold; cursor: pointer; font-size: 10px;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.3); transition: transform 0.1s;
+        }
+        .panel-btn:active { transform: translateY(2px); box-shadow: none; }
+
+        /* チャットのデザイン（折りたたみ対応） */
+        #chat-container {
+            position: absolute;
+            bottom: 10px;
+            width: 30%;
+            left: 10px;
+            z-index: 2000;
+            background: rgba(0, 0, 0, 0.7); /* 少し濃くして見やすく */
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease; /* アニメーション */
+            overflow: hidden;
+        }
+        
+        /* タイトルバー */
+        #chat-header {
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* 折りたたみ時の高さ */
+        #chat-container.collapsed {
+            height: 25px; /* タイトルバーの高さだけにする */
+            width: 9%;
+        }
+
+        #chat-content {
+            display: flex;
+            flex-direction: column;
+            height: 160px; /* 開いた時の高さ */
+            width: 100%;
+        }
+
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 5px;
+            font-size: 11px;
+            color: white;
+            /* --- スクロールバーを非表示にする設定 --- */
+            -ms-overflow-style: none;  /* IE, Edge用 */
+            scrollbar-width: none;     /* Firefox用 */
+        }
+
+        /* Chrome, Safari, Opera用 */
+        #chat-messages::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* 以下、入力欄などのスタイルは前回と同じ */
+        .chat-msg { margin-bottom: 3px; word-break: break-all; }
+        .chat-msg.me { color: #5dade2; }
+        .chat-msg.opp { color: #f1948a; }
+        #chat-input-row { display: flex; border-top: 1px solid rgba(255,255,255,0.2); }
+        #chat-input { flex: 1; background: transparent; border: none; color: white; padding: 5px; font-size: 11px; outline: none; }
+        #chat-send-btn { background: #3498db; border: none; color: white; padding: 0 8px; cursor: pointer; font-size: 10px; }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+<div id="board">
+    <div id="active-tray" class="field-tray"><span class="field-tray-label">Battle</span></div>
+    <div id="bench-tray" class="field-tray"><span class="field-tray-label">Bench Area</span></div>
+    <div id="stadium-tray" class="field-tray"><span class="field-tray-label">Stadium</span></div>
+
+    <div id="opp-active-tray" class="field-tray"><span class="field-tray-label">Opp Battle</span></div>
+    <div id="opp-bench-tray" class="field-tray"><span class="field-tray-label">Opp Bench Area</span></div>
+
+    <div id="selection-rect"></div>
+
+    <div id="deck-tray" class="tray" onclick="drawFromTray('deck')">
+        <div class="tray-label">DECK</div>
+        <div id="my-deck-count">60</div>
+    
+        <button class="shuffle-btn" onclick="event.stopPropagation(); shuffleDeck()">SHUFFLE</button>
+        <img id="deck-placeholder" src="https://www.pokemon-card.com/assets/images/noimage/poke_ura.jpg" class="tray-placeholder">
+        <button class="view-btn" onclick="event.stopPropagation(); showList('deck')">VIEW</button>
+    </div>
+    <div id="trash-tray" class="tray">
+        <div class="tray-label" style="top:5px;">TRASH</div>
+        <img id="trash-placeholder" src="" class="tray-placeholder">
+        <button class="view-btn" onclick="showList('trash')">VIEW</button>
+    </div>
+    <div id="my-tray" class="tray"><div class="tray-label" style="bottom:5px;">MY HAND</div></div>
+    <div id="hand-controller">
+        <div id="controller-stack-label" style="font-size:9px; margin-bottom:5px;">STACKED: 0</div>
+        <div class="ctrl-btn-grid">
+            <button class="ctrl-btn" onclick="organizeStack('hand')">手札戻す</button>
+            <button class="ctrl-btn" onclick="organizeStack('shuffle')">シャッフル</button>
+            <button class="ctrl-btn" onclick="organizeStack('deck-top')">山札上へ</button>
+            <button class="ctrl-btn" onclick="organizeStack('deck-bottom')">山札下へ</button>
+            <button class="ctrl-btn" onclick="organizeStack('re-dist')">手札の再配布</button>
+        </div>
+    </div>
+
+    <div id="opp-deck-tray" class="tray">
+        <div class="tray-label">OPP DECK</div>
+        <div id="opp-deck-count">60</div>
+    
+        <img id="opp-deck-placeholder" src="https://www.pokemon-card.com/assets/images/noimage/poke_ura.jpg" class="tray-placeholder">
+    </div>
+    <div id="opp-trash-tray" class="tray">
+        <div class="tray-label" style="bottom:5px;">OPP TRASH</div>
+        <img id="opp-trash-placeholder" src="" class="tray-placeholder">
+        <button class="view-btn" onclick="showList('oppTrash')">VIEW</button>
+    </div>
+    <div id="opp-tray" class="tray"><div class="tray-label" style="top:5px;">OPP HAND</div></div>
+    
+    <div id="counter-panel">
+        <button class="panel-btn counter-10" onpointerdown="startDragSpawn(event, '10', 'counter')">10</button>
+        <button class="panel-btn counter-50" onpointerdown="startDragSpawn(event, '50', 'counter')">50</button>
+        <button class="panel-btn counter-100" onpointerdown="startDragSpawn(event, '100', 'counter')">100</button>
+        <button class="panel-btn marker-poison" onpointerdown="startDragSpawn(event, 'どく', 'marker-poison')">どく</button>
+        <button class="panel-btn marker-burn" onpointerdown="startDragSpawn(event, 'やけど', 'marker-burn')">やけど</button>
+        <button class="panel-btn marker-paralysis" onpointerdown="startDragSpawn(event, 'まひ', 'marker-paralysis')">まひ</button>
+        <button class="panel-btn marker-sleep" onpointerdown="startDragSpawn(event, 'ねむり', 'marker-sleep')">ねむり</button>
+        <button class="panel-btn marker-confusion" onpointerdown="startDragSpawn(event, 'こんらん', 'marker-confusion')">こんらん</button>
+    </div>
+
+    <div id="chat-container" class="collapsed">
+        <div id="chat-header" onclick="toggleChat()">
+            <span>CHAT</span>
+            <span id="chat-status">▲</span>
+        </div>
+        <div id="chat-content">
+            <div id="chat-messages"></div>
+            <div id="chat-input-row">
+                <input type="text" id="chat-input" placeholder="メッセージ..." autocomplete="off">
+                <button id="chat-send-btn">送信</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="status-display">STATUS: <span id="status-id">INIT</span></div>
+<div id="coin"></div>
+<div id="zoom-overlay" onclick="$(this).fadeOut()"><img id="zoom-img"></div>
+<div id="list-overlay">
+    <div id="list-header">SELECT CARD</div>
+    <div id="list-content"></div>
+    <p style="margin-top:20px;"></p>
+</div>
+
+<script>
+    let peer, conn, topZ = 1000, deckData = [], trashData = [], oppTrashData = [], activeCards = {};
+    let isDeckLoaded = false, gameStarted = false;
+    let selectedCards = new Set();
+    let activeCounters = {}; 
+    let controllerStack = [];
+    let markerZ = 10000;
+    let oppCursor = null;
+
+    const getCardW = () => (85 / window.innerWidth) * 100;
+    const getCardH = () => (119 / window.innerHeight) * 100;
+
+    async function fetchDeckDataJS(deckID) {
+    if (!/^[a-zA-Z0-9-]+$/.test(deckID)) {
+        throw new Error("無効なデッキID形式です");
+    }
+
+    const targetUrl = `https://www.pokemon-card.com/deck/confirm.html/deckID/${deckID}/`;
+    // CORS回避のためのプロキシ
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error("ネットワークエラーが発生しました");
+    
+    const json = await response.json();
+    const html = json.contents;
+
+    // 1. ID と 画像パス の対応表を作る (PHPのロジックを再現)
+    const idToPath = {};
+    const pictRegex = /PCGDECK\.searchItemCardPict\[(\d+)\]\s*=\s*'([^']+)'/g;
+    let match;
+    while ((match = pictRegex.exec(html)) !== null) {
+        idToPath[match[1]] = match[2];
+    }
+
+    // 2. 隠しフォームから ID と 枚数 を抜き出す
+    const deckData = [];
+    const valueRegex = /value="([^"]+)"/g;
+    while ((match = valueRegex.exec(html)) !== null) {
+        const value = match[1];
+        if (value.includes('_')) {
+            const items = value.split('-');
+            items.forEach(item => {
+                const parts = item.split('_');
+                if (parts.length >= 2) {
+                    const id = parts[0];
+                    const count = parseInt(parts[1]);
+                    if (idToPath[id]) {
+                        deckData.push({
+                            card_pict: idToPath[id],
+                            count: count
+                        });
+                    }
+                }
+            });
+        }
+    }
+
+    if (deckData.length === 0) throw new Error("解析に失敗しました。デッキIDを確認してください。");
+    return deckData;
+    }
+
+    window.onload = async () => {
+        const myPeerID = sessionStorage.getItem('myPeerID');
+        const myDeckID = sessionStorage.getItem('myDeckID');
+        const targetID = sessionStorage.getItem('targetPeerID');
+        if(!myPeerID || !myDeckID || !targetID) { alert("Missing Info"); return; }
+
+        try {
+            const data = await fetchDeckDataJS(myDeckID);
+            
+            data.forEach(c => {
+                // パックスラッシュを置換し、URLを整形
+                let path = c.card_pict.replace(/\\/g, '/');
+                if (!path.startsWith('/')) path = '/' + path;
+                const url = "https://www.pokemon-card.com" + path;
+
+                for(let i=0; i < parseInt(c.count); i++) {
+                    deckData.push({ 
+                        url: url, 
+                        id: 'card-' + Math.random().toString(36).substr(2, 9) 
+                    });
+                }
+            });
+            // デッキを混ぜる
+            deckData.sort(() => Math.random() - 0.5);
+            isDeckLoaded = true;
+            updateTrayVisuals();
+        } catch (e) { 
+            console.error(e);
+            alert("Deck Error: " + e.message); 
+            return; 
+        }
+
+        peer = new Peer(myPeerID);
+        peer.on('open', () => {
+            document.getElementById('status-id').innerText = "CONNECTING...";
+            setupConnection(peer.connect(targetID, { reliable: true }));
+            // ★ ここにマウス座標の送信処理を追加します
+            window.addEventListener('mousemove', e => {
+                if (conn && conn.open) {
+                    // 画面サイズが違っても位置が合うように％座標で送信
+                    const xPc = (e.clientX / window.innerWidth) * 100;
+                    const yPc = (e.clientY / window.innerHeight) * 100;
+                    conn.send({ type: 'CURSOR_MOVE', x: xPc, y: yPc });
+                }
+            });
+        });
+
+        peer.on('connection', setupConnection);
+        initBoardSelection();
+    };
+
+    function setupConnection(c) {
+        if (conn && conn.open && conn.peer === c.peer) return;
+        conn = c;
+        conn.on('open', () => {
+            setInterval(() => { if (conn.open && isDeckLoaded && !gameStarted) conn.send({ type: 'I_AM_READY' }); }, 800);
+        });
+        conn.on('data', handleData);
+    }
+
+    function handleData(data) {
+
+        // --- 1. マウスカーソルの同期 (追加分) ---
+        if (data.type === 'CURSOR_MOVE') {
+            if (!oppCursor) {
+                oppCursor = document.createElement('div');
+                oppCursor.className = 'remote-cursor';
+                document.getElementById('board').appendChild(oppCursor);
+            }
+            // 相手の座標を反転させて自分の画面に配置
+            oppCursor.style.left = (100 - data.x) + '%';
+            oppCursor.style.top = (100 - data.y) + '%';
+            return; // カーソル移動は頻度が高いため、ここで処理を終了させる
+        }
+
+        // ★追加：チャットの受信処理をここに入れる
+        if (data.type === 'CHAT') {
+            addChatMessage("相手: " + data.text, 'opp');
+            return; // チャットもここで処理を終えて次に流さないようにする
+        }
+
+        // ゲーム開始の同期
+        if ((data.type === 'I_AM_READY' || data.type === 'START_GAME') && isDeckLoaded && !gameStarted) {
+            gameStarted = true;
+            document.getElementById('status-id').innerText = "LIVE";
+            if (data.type === 'I_AM_READY') conn.send({ type: 'START_GAME' });
+            autoSetup();
+        }
+
+        // カード生成時の同期
+        if (data.type === 'CARD_SYNC') {
+            createCardElement(data.url, data.id, false, data.x, data.y, data.isBack);
+            let receivedZ = parseInt(data.z);
+            if (!isNaN(receivedZ)) {
+                const el = activeCards[data.id];
+                if (el) el.style.zIndex = receivedZ;
+                // 相手が大きな zIndex を持っていたら自分の基準(topZ)を引き上げる
+                if (receivedZ >= topZ) topZ = receivedZ + 1;
+            }
+        }
+
+        // カード移動時の同期
+        if (data.type === 'CARD_MOVE') {
+            const el = activeCards[data.id];
+            if (el) {
+                const cw = getCardW(), ch = getCardH();
+                // 相手の座標を反転して配置
+                el.style.left = (100 - data.x - cw) + '%';
+                el.style.top = (100 - data.y - ch) + '%';
+            
+                // 重なり順（zIndex）の完全同期
+                let receivedZ = parseInt(data.z);
+                if (!isNaN(receivedZ)) {
+                    el.style.zIndex = receivedZ;
+                    // ★最重要: 相手がカードを一番上に持ってきた時、
+                    // 自分の topZ もそれに合わせないと、次に自分が触るカードが相手の下に潜る
+                    if (receivedZ >= topZ) {
+                        topZ = receivedZ + 1;
+                    }
+                }
+
+                if (data.isBack) el.classList.add('back');
+                else el.classList.remove('back');
+            }
+        }
+
+        // カード削除の同期
+        if (data.type === 'CARD_DELETE') {
+            if (activeCards[data.id]) {
+                activeCards[data.id].remove();
+                delete activeCards[data.id];
+            }
+        }
+
+        // トラッシュ移動の同期
+        if (data.type === 'CARD_TRASH') {
+            if (activeCards[data.id]) { 
+                activeCards[data.id].remove(); 
+                delete activeCards[data.id]; 
+            }
+            oppTrashData.push({ url: data.url, id: data.id });
+            updateTrayVisuals();
+        }
+
+        // トラッシュからカードを拾った時の同期
+        if (data.type === 'CARD_PICKUP') {
+            const idx = oppTrashData.findIndex(c => c.id === data.id);
+            if (idx !== -1) {
+                oppTrashData.splice(idx, 1);
+                updateTrayVisuals();
+                if ($('#list-overlay').is(':visible')) $('#list-overlay').fadeOut();
+            }
+        }
+
+        // コイントスの同期
+        if (data.type === 'COIN_TOSS') animateCoin(data.result);
+
+        // 山札残量の同期
+        if (data.type === 'TRAY_SYNC') {
+            const oppCountEl = document.getElementById('opp-deck-count');
+            if (oppCountEl) {
+                oppCountEl.innerText = data.deckCount; // 届いた枚数を表示
+            }
+        
+           const oppDeckImg = document.getElementById('opp-deck-placeholder');
+           if (oppDeckImg) {
+                // 枚数が 0 より多ければ表示、0 なら非表示
+                oppDeckImg.style.display = data.deckCount > 0 ? 'block' : 'none';
+            }
+        }
+
+        // カウンター生成の同期
+        if (data.type === 'COUNTER_SYNC') {
+            syncCounterElement(data);
+            let receivedZ = parseInt(data.z);
+            if (!isNaN(receivedZ)) {
+                if (receivedZ >= markerZ) markerZ = receivedZ + 1;
+            }
+        }
+
+        // カウンター移動の同期
+        if (data.type === 'COUNTER_MOVE') {
+            const el = activeCounters[data.id];
+            if (el) {
+                const cw = (30 / window.innerWidth) * 100;
+                const ch = (30 / window.innerHeight) * 100;
+                el.style.left = (100 - data.x - cw) + '%';
+                el.style.top = (100 - data.y - ch) + '%';
+            
+                let receivedZ = parseInt(data.z);
+                if (!isNaN(receivedZ)) {
+                    el.style.zIndex = receivedZ;
+                    if (receivedZ >= markerZ) markerZ = receivedZ + 1;
+                }
+            }
+        }
+
+        // カウンター削除の同期
+        if (data.type === 'COUNTER_DELETE') {
+            if (activeCounters[data.id]) {
+                activeCounters[data.id].remove();
+                delete activeCounters[data.id];
+            }
+        }
+    }
+
+    function updateTrayVisuals() {
+        // --- 1. 自分の山札の枚数を画面に表示 ---
+        const myCount = deckData.length;
+        const myCountEl = document.getElementById('my-deck-count');
+        if (myCountEl) {
+            myCountEl.innerText = myCount; 
+        }
+
+        const deckImg = document.getElementById('deck-placeholder');
+        deckImg.style.display = myCount > 0 ? 'block' : 'none';
+
+        // --- 2. 自分のトラッシュ表示 ---
+        const trashImg = document.getElementById('trash-placeholder');
+        if (trashData.length > 0) {
+            trashImg.src = trashData[trashData.length - 1].url;
+            trashImg.style.display = 'block';
+        } else trashImg.style.display = 'none';
+
+        // --- 3. 相手のトラッシュ表示 ---
+        const oppTrashImg = document.getElementById('opp-trash-placeholder');
+        if (oppTrashData.length > 0) {
+            oppTrashImg.src = oppTrashData[oppTrashData.length - 1].url;
+            oppTrashImg.style.display = 'block';
+        } else oppTrashImg.style.display = 'none';
+
+        // --- 4. 相手に「正確な枚数」を送信する (修正点) ---
+        if (conn && conn.open) {
+            conn.send({ 
+                type: 'TRAY_SYNC', 
+                deckCount: myCount // deckEmptyの代わりに枚数を送る
+            });
+        }
+    }
+
+    function initBoardSelection() {
+        const board = document.getElementById('board');
+        const rect = document.getElementById('selection-rect');
+        let startX, startY;
+        board.addEventListener('pointerdown', e => {
+            if (e.target.closest('#counter-panel') || e.target.classList.contains('card') || e.target.classList.contains('view-btn') || e.target.classList.contains('counter') || e.target.classList.contains('marker')) return;
+            selectedCards.forEach(c => c.classList.remove('selected'));
+            selectedCards.clear();
+            startX = e.clientX; startY = e.clientY;
+            rect.style.display = 'block';
+            rect.style.left = startX + 'px'; rect.style.top = startY + 'px';
+            rect.style.width = '0px'; rect.style.height = '0px';
+            const move = me => {
+                const curX = me.clientX, curY = me.clientY;
+                const left = Math.min(startX, curX), top = Math.min(startY, curY);
+                const width = Math.abs(curX - startX), height = Math.abs(curY - startY);
+                rect.style.left = left + 'px'; rect.style.top = top + 'px';
+                rect.style.width = width + 'px'; rect.style.height = height + 'px';
+                $('.card').each(function() {
+                    const r = this.getBoundingClientRect();
+                    if (r.left < left + width && r.right > left && r.top < top + height && r.bottom > top) {
+                        this.classList.add('selected'); selectedCards.add(this);
+                    } else {
+                        this.classList.remove('selected'); selectedCards.delete(this);
+                    }
+                });
+            };
+            const up = () => {
+                rect.style.display = 'none';
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+            };
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+        });
+    }
+
+    function autoSetup() {
+        const handCount = 7, cardSpacing = 4, startX = 35.6; 
+        for (let i = 0; i < handCount; i++) {
+            const c = deckData.pop();
+            const x = startX + (i * cardSpacing), y = 85; 
+            createCardElement(c.url, c.id, true, x, y, false);
+            sendCardSync(c.url, c.id, x, y, false);
+        }
+        for (let i = 0; i < 6; i++) {
+            const c = deckData.pop();
+            const x = 2.5, y = 80 - (i * 6); 
+            createCardElement(c.url, c.id, true, x, y, true);
+            sendCardSync(c.url, c.id, x, y, true);
+        }
+        updateTrayVisuals();
+    }
+
+    function createCardElement(url, id, isMe, x, y, isBack) {
+        if (activeCards[id]) return activeCards[id];
+        const img = document.createElement('img');
+        img.src = url; img.id = id;
+        img.className = 'card' + (isBack ? ' back' : '');
+        img.ondblclick = () => { 
+            if (!img.classList.contains('back')) { 
+                $('#zoom-img').attr('src', img.src); 
+                $('#zoom-overlay').css('display', 'flex').hide().fadeIn(150); 
+            } 
+        };
+        if (isMe) {
+            img.style.left = x + '%'; img.style.top = y + '%';
+            makeDraggable(img);
+            img.oncontextmenu = e => { e.preventDefault(); img.classList.toggle('back'); sendMove(img); };
+        } else {
+            const cw = getCardW(), ch = getCardH();
+            img.style.left = (100 - x - cw) + '%'; img.style.top = (100 - y - ch) + '%';
+            if ((y + ch > 80) && (x + cw > 10) && (x < 90)) img.classList.add('back');
+        }
+        img.style.zIndex = ++topZ;
+        document.getElementById('board').appendChild(img);
+        activeCards[id] = img;
+        return img;
+    }
+
+    function makeDraggable(el) {
+    let dragging = false, prevX, prevY;
+    const onPointerMove = e => {
+        if (!dragging) return;
+        const dxPc = (e.clientX - prevX) / window.innerWidth * 100;
+        const dyPc = (e.clientY - prevY) / window.innerHeight * 100;
+        if (el.classList.contains('card')) {
+            const targets = selectedCards.has(el) ? Array.from(selectedCards) : [el];
+            targets.forEach(card => {
+                const nx = parseFloat(card.style.left) + dxPc;
+                const ny = parseFloat(card.style.top) + dyPc;
+                const cardRect = card.getBoundingClientRect();
+                Object.values(activeCounters).forEach(counter => {
+                    const cntRect = counter.getBoundingClientRect();
+                    const cntCenterX = cntRect.left + cntRect.width / 2;
+                    const cntCenterY = cntRect.top + cntRect.height / 2;
+                    if (cntCenterX > cardRect.left && cntCenterX < cardRect.right &&
+                        cntCenterY > cardRect.top && cntCenterY < cardRect.bottom) {
+                        const cnx = parseFloat(counter.style.left) + dxPc;
+                        const cny = parseFloat(counter.style.top) + dyPc;
+                        counter.style.left = cnx + '%'; counter.style.top = cny + '%';
+                        sendCounterMove(counter);
+                    }
+                });
+                card.style.left = nx + '%'; card.style.top = ny + '%';
+                sendMove(card);
+            });
+        } else {
+            const nx = parseFloat(el.style.left) + dxPc;
+            const ny = parseFloat(el.style.top) + dyPc;
+            el.style.left = nx + '%'; el.style.top = ny + '%';
+            sendCounterMove(el);
+        }
+
+        // ★追加：ドラッグ中もマウス座標を相手に送る
+        if (conn && conn.open) {
+            const xPc = (e.clientX / window.innerWidth) * 100;
+            const yPc = (e.clientY / window.innerHeight) * 100;
+            conn.send({ type: 'CURSOR_MOVE', x: xPc, y: yPc });
+        }
+        prevX = e.clientX; prevY = e.clientY;
+    };
+    const onPointerUp = e => {
+        if (!dragging) return;
+        dragging = false;
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        el.releasePointerCapture(e.pointerId);
+
+        if (el.classList.contains('card')) {
+            const ctrl = document.getElementById('hand-controller').getBoundingClientRect();
+            // --- 手札コントローラーに入れた時の処理 ---
+            if (e.clientX > ctrl.left && e.clientX < ctrl.right && e.clientY > ctrl.top && e.clientY < ctrl.bottom) {
+                const targets = selectedCards.has(el) ? Array.from(selectedCards) : [el];
+                targets.forEach(card => {
+                    controllerStack.push({ url: card.src, id: card.id });
+                    card.remove(); 
+                    delete activeCards[card.id];
+                    
+                    // ★ここを 'CARD_TRASH' から 'CARD_DELETE' に修正
+                    if (conn && conn.open) {
+                        conn.send({ type: 'CARD_DELETE', id: card.id });
+                    }
+                });
+                document.getElementById('controller-stack-label').innerText = "STACKED: " + controllerStack.length;
+                selectedCards.clear(); 
+                updateTrayVisuals(); 
+                return;
+            }
+
+            // --- トラッシュトレイに入れた時の処理 ---
+            const t = document.getElementById('trash-tray').getBoundingClientRect();
+            if (e.clientX > t.left && e.clientX < t.right && e.clientY > t.top && e.clientY < t.bottom) {
+                const targets = selectedCards.has(el) ? Array.from(selectedCards) : [el];
+                targets.forEach(c => moveToTrash(c.id)); // こちらはトラッシュなのでそのままでOK
+                selectedCards.clear();
+            }
+        }
+    };
+
+    el.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        e.stopPropagation(); e.preventDefault();
+        dragging = true; prevX = e.clientX; prevY = e.clientY;
+        el.setPointerCapture(e.pointerId);
+        if (el.classList.contains('card')) {
+            // ★掴んだ瞬間に自分の topZ を更新し、それを適用して即座に相手に送る
+            topZ++;
+            const targets = selectedCards.has(el) ? Array.from(selectedCards) : [el];
+            targets.forEach(c => {
+                c.style.zIndex = topZ;
+                sendMove(c); // ここで zIndex を含めた最新情報を送信
+            });
+        } else {
+            markerZ++;
+            el.style.zIndex = markerZ;
+            sendCounterMove(el);
+        }
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+    });
+}
+
+    function moveToTrash(id) {
+        const el = activeCards[id];
+        if (!el) return;
+        trashData.push({ url: el.src, id });
+        if (conn && conn.open) conn.send({ type: 'CARD_TRASH', id, url: el.src });
+        el.remove(); delete activeCards[id];
+        updateTrayVisuals();
+    }
+
+    function sendCardSync(url, id, x, y, isBack) {
+        if (conn && conn.open) {
+            const cw = getCardW(), ch = getCardH();
+            const isInsideMyHandTray = (y + ch > 80) && (x + cw > 10) && (x < 90);
+            conn.send({ type: 'CARD_SYNC', url, id, x, y, z: parseInt(topZ), isBack: isBack || isInsideMyHandTray });
+        }
+    }
+
+    function sendMove(el) {
+        if (conn && conn.open) {
+            const x = parseFloat(el.style.left), y = parseFloat(el.style.top);
+            const cw = getCardW(), ch = getCardH();
+            const isInsideMyHandTray = (y + ch > 80) && (x + cw > 10) && (x < 90);
+        
+            // 数値として zIndex を取得し、相手に送る
+            const currentZ = parseInt(el.style.zIndex) || topZ;
+
+            conn.send({ 
+                type: 'CARD_MOVE', 
+                id: el.id, 
+                x: x, 
+                y: y, 
+                z: currentZ, 
+                isBack: isInsideMyHandTray || el.classList.contains('back') 
+            });
+        }
+    }
+
+    function drawFromTray(type) {
+        if (type === 'deck' && deckData.length > 0) {
+            const c = deckData.pop();
+            createCardElement(c.url, c.id, true, 20, 85, false);
+            sendCardSync(c.url, c.id, 20, 85, false);
+            updateTrayVisuals();
+        }
+    }
+
+    function showList(type) {
+        let list = (type === 'deck') ? deckData : (type === 'trash' ? trashData : oppTrashData);
+        $('#list-header').text(type.toUpperCase() + (type === 'deck' ? " (RightClick: Flip / Click: Take)" : " (CLICK TO TAKE)"));
+        const flipStates = {}, footer = $('#list-overlay p');
+        let footerHtml = '';
+        if (type === 'deck') footerHtml += `<span id="all-front" style="cursor:pointer; color:#adff2f; margin-right:30px; font-weight:bold;">[ ALL FRONT ]</span>`;
+        footerHtml += `<span id="list-close" style="cursor:pointer; color:orange; font-weight:bold;">[ CLOSE ]</span>`;
+        footer.html(footerHtml);
+
+        $('#all-front').off('click').on('click', e => { e.stopPropagation(); $('.list-card').removeClass('back'); Object.keys(flipStates).forEach(id => flipStates[id] = false); });
+        $('#list-close').off('click').on('click', e => { e.stopPropagation(); if (type === 'deck') deckData.sort(() => Math.random() - 0.5); $('#list-overlay').fadeOut(); updateTrayVisuals(); });
+
+        const renderList = () => {
+            const container = $('#list-content').empty();
+            if (list.length === 0) { $('#list-overlay').fadeOut(); updateTrayVisuals(); return; }
+            [...list].reverse().forEach((card, displayIdx) => {
+                if (flipStates[card.id] === undefined) flipStates[card.id] = (type === 'deck'); 
+                const img = $('<img>').addClass('list-card').attr('src', card.url).attr('data-id', card.id);
+                if (flipStates[card.id]) img.addClass('back');
+                img.on('dblclick', e => { e.stopPropagation(); if (!img.hasClass('back')) { $('#zoom-img').attr('src', card.url); $('#zoom-overlay').css('display', 'flex').hide().fadeIn(150); } });
+                if (type !== 'oppTrash') {
+                    img.on('click', e => { e.stopPropagation(); setTimeout(() => {
+                        const s = list.splice(list.length - 1 - displayIdx, 1)[0];
+                        delete flipStates[s.id];
+                        createCardElement(s.url, s.id, true, 45, 70, false);
+                        sendCardSync(s.url, s.id, 45, 70, false);
+                        if (type === 'trash' && conn && conn.open) conn.send({ type: 'CARD_PICKUP', id: s.id });
+                        updateTrayVisuals(); renderList();
+                    }, 200); });
+                    img.on('contextmenu', e => { e.preventDefault(); e.stopPropagation(); if (type === 'deck') { img.toggleClass('back'); flipStates[card.id] = img.hasClass('back'); } });
+                }
+                container.append(img);
+            });
+        };
+        renderList(); $('#list-overlay').fadeIn();
+    }
+    
+    function organizeStack(type) {
+        if (controllerStack.length === 0 && type !== 're-dist') return;
+        if (type === 'hand') {
+            controllerStack.forEach((c, i) => {
+                createCardElement(c.url, c.id, true, 40 + (i * 2), 85, false);
+                sendCardSync(c.url, c.id, 40 + (i * 2), 85, false);
+            });
+            controllerStack = [];
+        } else if (type === 'shuffle') {
+            for (let i = controllerStack.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [controllerStack[i], controllerStack[j]] = [controllerStack[j], controllerStack[i]];
+            }
+            document.getElementById('controller-stack-label').innerText = "SHUFFLED!";
+            setTimeout(() => { document.getElementById('controller-stack-label').innerText = "STACKED: " + controllerStack.length; }, 800);
+        } else if (type === 'deck-top') {
+            controllerStack.forEach(c => deckData.push(c));
+            controllerStack = [];
+        } else if (type === 'deck-bottom') {
+            [...controllerStack].reverse().forEach(c => deckData.unshift(c));
+            controllerStack = [];
+        } else if (type === 're-dist') {
+            $('.card').filter(function() { return parseFloat(this.style.top) > 75 && parseFloat(this.style.left) > 5.5; }).each(function() {
+                deckData.push({ url: this.src, id: this.id }); this.remove(); delete activeCards[this.id];
+                if (conn && conn.open) conn.send({ type: 'CARD_DELETE', id: this.id });
+            });
+            controllerStack.forEach(c => { deckData.push(c); if (conn && conn.open) conn.send({ type: 'CARD_DELETE', id: c.id }); });
+            controllerStack = [];
+            shuffleDeck();
+            for (let i = 0; i < 7; i++) setTimeout(() => drawFromTray('deck'), i * 150);
+        }
+        document.getElementById('controller-stack-label').innerText = "STACKED: " + controllerStack.length;
+        updateTrayVisuals();
+    }
+
+    function shuffleDeck() {
+        if (deckData.length === 0) return;
+        for (let i = deckData.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deckData[i], deckData[j]] = [deckData[j], deckData[i]];
+        }
+        const btn = document.querySelector('.shuffle-btn');
+        btn.innerText = "SHUFFLED!";
+        setTimeout(() => btn.innerText = "SHUFFLE", 1000);
+    }
+
+    // コインを投げるメイン関数
+function tossCoin() {
+    // 自分の画面で結果を決め、相手に送る
+    const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
+    animateCoin(result);
+    if (conn && conn.open) {
+        conn.send({ type: 'COIN_TOSS', result: result });
+    }
+}
+
+    // アニメーション実行関数 (受信時もこれを使う)
+    function animateCoin(result) {
+    const coin = document.getElementById('coin');
+    
+    // 以前の状態をリセット
+    coin.classList.remove('flipping', 'heads', 'tails');
+    
+    // 再描画を強制
+    void coin.offsetWidth; 
+    
+    // 回転開始
+    coin.classList.add('flipping');
+
+    // 0.6秒後(アニメーション終了時)に画像を確定
+    setTimeout(() => {
+        coin.classList.remove('flipping');
+        // 大文字で判定を統一
+        if (result === 'HEADS') {
+            coin.classList.add('heads');
+        } else {
+            coin.classList.add('tails');
+        }
+    }, 600);
+    }
+
+    // コインをクリックした時のイベント登録
+    document.getElementById('coin').onclick = () => {
+        tossCoin();
+    };
+    function startDragSpawn(e, label, typeClass) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const id = (typeClass === 'counter' ? 'cnt-' : 'mrk-') + Math.random().toString(36).substr(2, 9);
+        const sizePx = (typeClass === 'counter') ? 30 : 36;
+        const x = ((e.clientX - sizePx / 2) / window.innerWidth) * 100;
+        const y = ((e.clientY - sizePx / 2) / window.innerHeight) * 100;
+        const el = createCounterElement(id, label, typeClass, x, y, true);
+        sendCounterSync(id, label, typeClass, x, y);
+        const downEvent = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, button: 0, buttons: 1 });
+        el.dispatchEvent(downEvent);
+    }
+
+    function sendCounterSync(id, label, typeClass, x, y) {
+        if (conn && conn.open) conn.send({ type: 'COUNTER_SYNC', id, label, typeClass, x, y, z: parseInt(markerZ) });
+    }
+
+    function createCounterElement(id, label, typeClass, x, y, isMe) {
+        if (activeCounters[id]) return activeCounters[id];
+        const div = document.createElement('div');
+        div.id = id; div.innerText = label;
+        div.className = (typeClass.startsWith('marker')) ? `marker ${typeClass}` : `counter counter-${label}`;
+        div.style.left = x + '%'; div.style.top = y + '%';
+        div.style.zIndex = ++markerZ; 
+        if (isMe) {
+            makeDraggable(div);
+            div.ondblclick = e => { e.stopPropagation(); div.remove(); delete activeCounters[id]; if (conn && conn.open) conn.send({ type: 'COUNTER_DELETE', id }); };
+        }
+        document.getElementById('board').appendChild(div);
+        activeCounters[id] = div;
+        return div;
+    }
+
+    function syncCounterElement(data) {
+        if (activeCounters[data.id]) return;
+        const div = document.createElement('div');
+        div.id = data.id; div.innerText = data.label;
+        div.className = (data.typeClass.startsWith('marker')) ? `marker ${data.typeClass}` : `counter counter-${data.label}`;
+        const cw = (30 / window.innerWidth) * 100, ch = (30 / window.innerHeight) * 100;
+        div.style.left = (100 - data.x - cw) + '%'; div.style.top = (100 - data.y - ch) + '%';
+        div.style.zIndex = data.z;
+        document.getElementById('board').appendChild(div);
+        activeCounters[data.id] = div;
+    }
+
+    function sendCounterMove(el) {
+        if (conn && conn.open) conn.send({ type: 'COUNTER_MOVE', id: el.id, x: parseFloat(el.style.left), y: parseFloat(el.style.top), z: parseInt(el.style.zIndex) });
+    }
+    function toggleChat() {
+        const chat = document.getElementById('chat-container');
+        const status = document.getElementById('chat-status');
+        if (!chat) return;
+        chat.classList.toggle('collapsed');
+        status.innerText = chat.classList.contains('collapsed') ? "▲" : "▼";
+    }
+
+    // チャット送信処理
+    function sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        if (!input) return;
+        
+        const msg = input.value.trim();
+        if (msg === "") return;
+
+        // 相手に送信
+        if (conn && conn.open) {
+            conn.send({ type: 'CHAT', text: msg });
+        }
+        
+        // 自分の画面に表示
+        addChatMessage("自分: " + msg, 'me');
+        input.value = ""; // 入力欄を空にする
+    }
+
+    // メッセージを画面に表示する共通関数
+    function addChatMessage(text, className) {
+        const chat = document.getElementById('chat-container');
+        const status = document.getElementById('chat-status');
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) return;
+
+        // 相手から届いたときは自動で開く
+        if (className === 'opp' && chat.classList.contains('collapsed')) {
+            chat.classList.remove('collapsed');
+            if (status) status.innerText = "▼";
+        }
+
+        const div = document.createElement('div');
+        div.className = 'chat-msg ' + className;
+        div.innerText = text;
+        chatMessages.appendChild(div);
+        
+        // 最新のメッセージへ自動スクロール
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // ボタンクリックとEnterキーのイベント登録
+    // ※ページの読み込みが終わってから確実に登録する
+    $(document).ready(function() {
+        $('#chat-send-btn').on('click', function() {
+            sendChatMessage();
+        });
+
+        $('#chat-input').on('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+    });
+</script>
+</body>
+</html>

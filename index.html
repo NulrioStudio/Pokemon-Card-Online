@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Pokemon-Card Online - マッチング</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { background: #1a1a1a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .setup-card { background: #333; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 350px; text-align: center; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #555; background: #222; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 5px; background: #e67e22; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .status { margin-top: 15px; font-size: 14px; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="setup-card">
+        <h2>対戦準備</h2>
+        <div id="my-id-display" style="margin-bottom:10px;">あなたのID: <strong id="my-id">発行中...</strong></div>
+        <input type="text" id="deckID" placeholder="デッキコード">
+        <input type="text" id="peerTarget" placeholder="相手のIDを入力">
+        <button id="startBtn" onclick="startBattle()" disabled>対戦開始</button>
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        const peer = new Peer();
+        let myId = null;
+
+        peer.on('open', id => {
+            myId = id;
+            document.getElementById('my-id').innerText = id;
+            document.getElementById('startBtn').disabled = false;
+        });
+
+        peer.on('connection', conn => {
+            moveToGame(conn.peer);
+        });
+
+        function startBattle() {
+            const target = document.getElementById('peerTarget').value.trim();
+            if(!target) return alert("相手のIDを入力してください");
+            moveToGame(target);
+        }
+
+        function moveToGame(target) {
+            const deckID = document.getElementById('deckID').value.trim();
+            if(!deckID) return alert("先にデッキIDを入力してください");
+
+            const deckIdPattern = /^[a-zA-Z0-9-]+$/;
+            if (!deckIdPattern.test(deckID)) {
+                return alert("デッキIDの形式が正しくありません。\n英数字とハイフンのみ使用できます。");
+            }
+
+            sessionStorage.setItem('myPeerID', myId);
+            sessionStorage.setItem('myDeckID', deckID);
+            sessionStorage.setItem('targetPeerID', target);
+
+            document.getElementById('status').innerText = "接続を確立中...";
+            
+            // 既存のPeerを破棄してから遷移（game.htmlでのID競合を防ぐ）
+            peer.destroy();
+            setTimeout(() => { location.href = 'game.html'; }, 500);
+        }
+    </script>
+</body>
+</html>
