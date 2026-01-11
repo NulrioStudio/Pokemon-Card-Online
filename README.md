@@ -15,7 +15,7 @@ PeerJSを利用したP2P通信により、サーバーを介さずに対戦相�
 - **技術の探求**: WebRTC (P2P) を用いたリアルタイム同期技術の学習。
 
 ## 🌐 デモサイト (GitHub Pages)
-**[👉 ここをクリックして対戦を開始する](pokemon-card-online.nulrio.com)**
+**[👉 ここをクリックして対戦を開始する](https://pokemon-card-online.nulrio.com)**
 
 ## 🚀 特徴
 - **インストール不要**: ブラウザだけで今すぐに対戦を始められます。
