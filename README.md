@@ -1,7 +1,7 @@
 # Pokemon-Card Online Simulator
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live-blue)]([あなたのGitHub Pages URL])
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live-blue)](https://pokemon-card-online.nulrio.com)
 
 ブラウザだけで動作する、ポケモンカードゲームの非公式オンライン対戦シミュレーターです。
 PeerJSを利用したP2P通信により、サーバーを介さずに対戦相手と直接データを同期します。
@@ -15,7 +15,7 @@ PeerJSを利用したP2P通信により、サーバーを介さずに対戦相�
 - **技術の探求**: WebRTC (P2P) を用いたリアルタイム同期技術の学習。
 
 ## 🌐 デモサイト (GitHub Pages)
-**[👉 ここをクリックして対戦を開始する]([あなたのGitHub Pages URL])**
+**[👉 ここをクリックして対戦を開始する](pokemon-card-online.nulrio.com)**
 
 ## 🚀 特徴
 - **インストール不要**: ブラウザだけで今すぐに対戦を始められます。
