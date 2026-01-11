@@ -1,4 +1,4 @@
-# Pokeka Online Simulator
+# Pokemon-Card Online Simulator
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live-blue)]([あなたのGitHub Pages URL])
