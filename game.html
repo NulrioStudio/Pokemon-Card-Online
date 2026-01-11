@@ -403,95 +403,98 @@
     const getCardH = () => (119 / window.innerHeight) * 100;
 
     async function fetchDeckDataJS(deckID) {
-    if (!/^[a-zA-Z0-9-]+$/.test(deckID)) {
-        throw new Error("無効なデッキID形式です");
-    }
-
-    const targetUrl = `https://www.pokemon-card.com/deck/confirm.html/deckID/${deckID}/`;
-    // CORS回避のためのプロキシ
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-
-    const response = await fetch(proxyUrl);
-    if (!response.ok) throw new Error("ネットワークエラーが発生しました");
-    
-    const json = await response.json();
-    const html = json.contents;
-
-    // 1. ID と 画像パス の対応表を作る (PHPのロジックを再現)
-    const idToPath = {};
-    const pictRegex = /PCGDECK\.searchItemCardPict\[(\d+)\]\s*=\s*'([^']+)'/g;
-    let match;
-    while ((match = pictRegex.exec(html)) !== null) {
-        idToPath[match[1]] = match[2];
-    }
-
-    // 2. 隠しフォームから ID と 枚数 を抜き出す
-    const deckData = [];
-    const valueRegex = /value="([^"]+)"/g;
-    while ((match = valueRegex.exec(html)) !== null) {
-        const value = match[1];
-        if (value.includes('_')) {
-            const items = value.split('-');
-            items.forEach(item => {
-                const parts = item.split('_');
-                if (parts.length >= 2) {
-                    const id = parts[0];
-                    const count = parseInt(parts[1]);
-                    if (idToPath[id]) {
-                        deckData.push({
-                            card_pict: idToPath[id],
-                            count: count
-                        });
-                    }
-                }
-            });
+        if (!/^[a-zA-Z0-9-]+$/.test(deckID)) {
+            throw new Error("無効なデッキID形式です");
         }
-    }
 
-    if (deckData.length === 0) throw new Error("解析に失敗しました。デッキIDを確認してください。");
-    return deckData;
+        const targetUrl = `https://www.pokemon-card.com/deck/confirm.html/deckID/${deckID}/`;
+        // GitHub Pagesで安定する corsproxy.io に変更（alloriginsより解析が楽です）
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error("ネットワークエラーが発生しました");
+
+        // corsproxy.io はテキストをそのまま返すので .text() を使用
+        const html = await response.text();
+
+        // 1. ID と 画像パス の対応表を作る
+        const idToPath = {};
+        const pictRegex = /PCGDECK\.searchItemCardPict\[(\d+)\]\s*=\s*'([^']+)'/g;
+        let match;
+        while ((match = pictRegex.exec(html)) !== null) {
+            idToPath[match[1]] = match[2];
+        }
+
+        // 2. 隠しフォームから ID と 枚数 を抜き出す
+        const deckDataList = [];
+        const valueRegex = /value="([^"]+)"/g;
+        while ((match = valueRegex.exec(html)) !== null) {
+            const value = match[1];
+            if (value.includes('_')) {
+                const items = value.split('-');
+                items.forEach(item => {
+                    const parts = item.split('_');
+                    if (parts.length >= 2) {
+                        const id = parts[0];
+                        const count = parseInt(parts[1]);
+                        if (idToPath[id]) {
+                            deckDataList.push({
+                                card_pict: idToPath[id],
+                                count: count
+                            });
+                        }
+                    }
+                });
+            }
+        }
+
+        if (deckDataList.length === 0) throw new Error("解析に失敗しました。");
+        return deckDataList;
     }
 
     window.onload = async () => {
         const myPeerID = sessionStorage.getItem('myPeerID');
         const myDeckID = sessionStorage.getItem('myDeckID');
         const targetID = sessionStorage.getItem('targetPeerID');
-        if(!myPeerID || !myDeckID || !targetID) { alert("Missing Info"); return; }
+        if (!myPeerID || !myDeckID || !targetID) {
+            alert("Missing Info");
+            return;
+        }
 
+        // デッキ読み込み処理（エラーが起きてもPeer通信を止めないように独立）
         try {
             const data = await fetchDeckDataJS(myDeckID);
-            
             data.forEach(c => {
-                // パックスラッシュを置換し、URLを整形
                 let path = c.card_pict.replace(/\\/g, '/');
                 if (!path.startsWith('/')) path = '/' + path;
                 const url = "https://www.pokemon-card.com" + path;
 
-                for(let i=0; i < parseInt(c.count); i++) {
-                    deckData.push({ 
-                        url: url, 
-                        id: 'card-' + Math.random().toString(36).substr(2, 9) 
+                for (let i = 0; i < parseInt(c.count); i++) {
+                    deckData.push({
+                        url: url,
+                        id: 'card-' + Math.random().toString(36).substr(2, 9)
                     });
                 }
             });
-            // デッキを混ぜる
             deckData.sort(() => Math.random() - 0.5);
             isDeckLoaded = true;
             updateTrayVisuals();
-        } catch (e) { 
+        } catch (e) {
             console.error(e);
-            alert("Deck Error: " + e.message); 
-            return; 
+            alert("Deck Error: " + e.message);
+            // 失敗しても peer 処理へ進むために return はしない
         }
 
+        // PeerJS の初期化
         peer = new Peer(myPeerID);
+
         peer.on('open', () => {
             document.getElementById('status-id').innerText = "CONNECTING...";
             setupConnection(peer.connect(targetID, { reliable: true }));
-            // ★ ここにマウス座標の送信処理を追加します
+
+            // マウス座標の送信
             window.addEventListener('mousemove', e => {
                 if (conn && conn.open) {
-                    // 画面サイズが違っても位置が合うように％座標で送信
                     const xPc = (e.clientX / window.innerWidth) * 100;
                     const yPc = (e.clientY / window.innerHeight) * 100;
                     conn.send({ type: 'CURSOR_MOVE', x: xPc, y: yPc });
@@ -500,6 +503,11 @@
         });
 
         peer.on('connection', setupConnection);
+        peer.on('error', err => {
+            console.error("Peer Error:", err);
+            alert("通信エラー: " + err.type);
+        });
+
         initBoardSelection();
     };
 
