@@ -1005,14 +1005,14 @@
     }
 
     // コインを投げるメイン関数
-function tossCoin() {
-    // 自分の画面で結果を決め、相手に送る
-    const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
-    animateCoin(result);
-    if (conn && conn.open) {
-        conn.send({ type: 'COIN_TOSS', result: result });
+    function tossCoin() {
+        // 自分の画面で結果を決め、相手に送る
+        const result = Math.random() < 0.5 ? 'HEADS' : 'TAILS';
+        animateCoin(result);
+        if (conn && conn.open) {
+            conn.send({ type: 'COIN_TOSS', result: result });
+        }
     }
-}
 
     // アニメーション実行関数 (受信時もこれを使う)
     function animateCoin(result) {
@@ -1154,4 +1154,5 @@ function tossCoin() {
     });
 </script>
 </body>
+
 </html>
