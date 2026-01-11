@@ -35,7 +35,7 @@ PeerJSを利用したP2P通信により、サーバーを介さずに対戦相�
 ## 📦 技術スタック
 - **Frontend**: HTML5 / CSS3 / JavaScript (jQuery 3.7.1)
 - **Networking**: [PeerJS](https://peerjs.com/) (P2P/WebRTC)
-- **Proxy**: [AllOrigins](https://allorigins.win/) (CORS回避用)
+- **Proxy**: [corsproxy.io](https://corsproxy.io/) (CORS回避用)
 
 ## ⚠️ 免責事項 (Disclaimer)
 - **非公式・非営利**: 本プロジェクトは個人によるファンメイド作品であり、株式会社ポケモン、株式会社クリーチャーズ、株式会社ゲームフリークとは一切関係ありません。
